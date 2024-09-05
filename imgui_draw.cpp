@@ -3926,7 +3926,7 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
     return s;
 }
 
-ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, const char* text_begin, const char* text_end, const char** remaining) const
+ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, const char* text_begin, const char* text_end, const char** remaining, int textFlags) const
 {
     if (!text_end)
         text_end = text_begin + strlen(text_begin); // FIXME-OPT: Need to avoid this.
@@ -3943,6 +3943,18 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
     const char* s = text_begin;
     while (s < text_end)
     {
+		if (!word_wrap_enabled && (textFlags & ImGuiTextFlags_ParseColors)) {
+			if (s[0] == '{' && s < text_end - 1 && s[1] == '#') {
+				s += 2;
+				const char *colorBegin = s, *colorEnd = colorBegin;
+				while (colorBegin < text_end && *colorBegin != '}')
+					++colorBegin;
+				s = colorBegin + 1;
+				if (s >= text_end)
+					break;
+			}
+		}
+
         if (word_wrap_enabled)
         {
             // Calculate how far we can render. Requires two passes on the string data but keeps the code simple and not intrusive for what's essentially an uncommon feature.

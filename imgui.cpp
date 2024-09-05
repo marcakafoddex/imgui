@@ -3516,7 +3516,7 @@ void ImGui::RenderText(ImVec2 pos, const char* text, const char* text_end, bool 
     }
 }
 
-void ImGui::RenderTextWrapped(ImVec2 pos, const char* text, const char* text_end, float wrap_width)
+void ImGui::RenderTextWrapped(ImVec2 pos, const char* text, const char* text_end, float wrap_width, int textFlags)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -3526,9 +3526,53 @@ void ImGui::RenderTextWrapped(ImVec2 pos, const char* text, const char* text_end
 
     if (text != text_end)
     {
-        window->DrawList->AddText(g.Font, g.FontSize, pos, GetColorU32(ImGuiCol_Text), text, text_end, wrap_width);
-        if (g.LogEnabled)
-            LogRenderedText(&pos, text, text_end);
+		// most common case
+		if (!(textFlags & ImGuiTextFlags_ParseColors)) {
+			window->DrawList->AddText(g.Font, g.FontSize, pos, GetColorU32(ImGuiCol_Text), text, text_end, wrap_width);
+			if (g.LogEnabled)
+				LogRenderedText(&pos, text, text_end);
+		} else {
+			// cannot be wrapping at this point; split up draw calls from colored section to colored section
+			IM_ASSERT(wrap_width == 0.0f);
+			ImU32 currentColor = GetColorU32(ImGuiCol_Text); // this is our default color
+			auto toVal = [](char a) -> int { if (a >= '0' && a <= '9') return a - '0'; if (a >= 'a' && a <= 'f') return 10 + a - 'a'; return 10 + a - 'A'; };
+			auto toByte = [&](char a) -> int { return (int)toVal(a)  * 17; };
+			auto toByte2 = [&](char a, char b) -> int { return (int)toVal(a) * 16 + (int)toVal(b); };
+			while (text < text_end) {
+				// scan until next color block
+				const char* s = text;
+				while (s < text_end) {
+					if (s[0] == '{' && s < text_end - 1 && s[1] == '#') {
+						break;
+					}
+					++s;
+				}
+
+				// render with current color
+				if (s != text) {
+					const float textWidth = CalcTextSize(text, s).x;
+					window->DrawList->AddText(g.Font, g.FontSize, pos, currentColor, text, s, wrap_width);
+					pos.x += textWidth;
+				}
+
+				// handle color change
+				s += 2; // skip over "{#"
+				const char* color = s;
+				while (s < text_end && *s != '}')
+					++s;
+				if (s == text_end)
+					break;
+				const int colorSpecLength = s - color;
+				switch (colorSpecLength) {
+				case 3: currentColor = ImColor(toByte(color[0]), toByte(color[1]), toByte(color[2]), 255); break; // e.g. #fff, alpha 255
+				case 4: currentColor = ImColor(toByte(color[0]), toByte(color[1]), toByte(color[2]), toByte(color[3])); break; // e.g. #ffff, last represents alpha
+				case 6: currentColor = ImColor(toByte2(color[0], color[1]), toByte2(color[2], color[3]), toByte2(color[4], color[5]), 255); break; // e.g. #ff00ff, alpha 255
+				case 8: currentColor = ImColor(toByte2(color[0], color[1]), toByte2(color[2], color[3]), toByte2(color[4], color[5]), toByte2(color[6], color[7])); break; // e.g. #ff00ff88, last 2 represent alpha
+				default: break; // what is this? ignore it
+				}
+				text = s + 1;
+			}
+		}
     }
 }
 
@@ -5383,7 +5427,7 @@ void ImGui::Render()
 
 // Calculate text size. Text can be multi-line. Optionally ignore text after a ## marker.
 // CalcTextSize("") should return ImVec2(0.0f, g.FontSize)
-ImVec2 ImGui::CalcTextSize(const char* text, const char* text_end, bool hide_text_after_double_hash, float wrap_width)
+ImVec2 ImGui::CalcTextSize(const char* text, const char* text_end, bool hide_text_after_double_hash, float wrap_width, int textFlags)
 {
     ImGuiContext& g = *GImGui;
 
@@ -5397,7 +5441,7 @@ ImVec2 ImGui::CalcTextSize(const char* text, const char* text_end, bool hide_tex
     const float font_size = g.FontSize;
     if (text == text_display_end)
         return ImVec2(0.0f, font_size);
-    ImVec2 text_size = font->CalcTextSizeA(font_size, FLT_MAX, wrap_width, text, text_display_end, NULL);
+    ImVec2 text_size = font->CalcTextSizeA(font_size, FLT_MAX, wrap_width, text, text_display_end, NULL, textFlags);
 
     // Round
     // FIXME: This has been here since Dec 2015 (7b0bf230) but down the line we want this out.

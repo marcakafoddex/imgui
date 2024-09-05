@@ -172,7 +172,7 @@ void ImGui::TextEx(const char* text, const char* text_end, ImGuiTextFlags flags)
     {
         // Common case
         const float wrap_width = wrap_enabled ? CalcWrapWidthForPos(window->DC.CursorPos, wrap_pos_x) : 0.0f;
-        const ImVec2 text_size = CalcTextSize(text_begin, text_end, false, wrap_width);
+        const ImVec2 text_size = CalcTextSize(text_begin, text_end, false, wrap_width, flags);
 
         ImRect bb(text_pos, text_pos + text_size);
         ItemSize(text_size, 0.0f);
@@ -180,7 +180,7 @@ void ImGui::TextEx(const char* text, const char* text_end, ImGuiTextFlags flags)
             return;
 
         // Render (we don't hide text after ## in this end-user function)
-        RenderTextWrapped(bb.Min, text_begin, text_end, wrap_width);
+        RenderTextWrapped(bb.Min, text_begin, text_end, wrap_width, flags);
     }
     else
     {
@@ -1677,6 +1677,19 @@ void ImGui::SeparatorText(const char* label)
     // Otherwise, we can decide that users wanting to drag this would layout a dedicated drag-item,
     // and then we can turn this into a format function.
     SeparatorTextEx(0, label, FindRenderedTextEnd(label), 0.0f);
+}
+
+void ImGui::TextAttr(const char* fmt, ...) {
+	ImGuiWindow* window = GetCurrentWindow();
+	if (window->SkipItems)
+		return;
+
+	va_list args;
+	va_start(args, fmt);
+	const char *text, *text_end;
+	ImFormatStringToTempBufferV(&text, &text_end, fmt, args);
+	TextEx(text, text_end, ImGuiTextFlags_ParseColors);
+	va_end(args);
 }
 
 // Using 'hover_visibility_delay' allows us to hide the highlight and mouse cursor for a short time, which can be convenient to reduce visual noise.
